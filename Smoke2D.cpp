@@ -23,7 +23,7 @@ void Smoke2D::Simulation(void)
 	m_Frame++;
 }
 
-//Gauss-Seidel 기반 
+//가우스-자이델 기반 확산 연산
 void Smoke2D::Solver(double *x, double *x0, int alpha, int beta, int type, int times)
 {
 	for (int k = 0; k < times; k++) {
@@ -36,6 +36,7 @@ void Smoke2D::Solver(double *x, double *x0, int alpha, int beta, int type, int t
 	}
 }
 
+//발산 제거를 위한 압력 연산
 void Smoke2D::Project(double *ux, double *uy, double *p, double *div)
 {
 	for (int i = 1; i <= RES_SMOKE; i++) {
@@ -59,6 +60,7 @@ void Smoke2D::Project(double *ux, double *uy, double *p, double *div)
 	SetBoundary(2, uy);
 }
 
+//이류
 void Smoke2D::Advect(double *d, double *d0, double *ux, double *uy, int bType)
 {
 	int i0, j0, i1, j1;
@@ -100,17 +102,24 @@ void Smoke2D::UpdateVelocity(void)
 	int size = (RES_SMOKE + 2) * (RES_SMOKE + 2);
 	double a = dt * VISC * RES_SMOKE* RES_SMOKE;
 	
+	//x축 속도 확산
 	SWAP(u0, u);
 	Solver(u, u0, a, 1.0 + 4.0 * a, 1, 20);
+	//y축 속도 확산
 	SWAP(v0, v);
 	Solver(v, v0, a, 1.0 + 4.0 * a, 2, 20);
+	
+	//확산된 속도장의 발산 제거
 	Project(u, v, u0, v0);
+	
 	SWAP(u0, u);
 	SWAP(v0, v);
 
+	// 1-1.이중선형보간법 기반 속도장 이류
 	Advect(u, u0, u0, v0, 1);
 	Advect(v, v0, u0, v0, 2);
 
+	// 1-2.DCMLS보간법 기반 속도장 이류 (by. GPU)
 	advectMLS(mu, mv, u0, v0);
 
 	for (int i = 1; i <= RES_SMOKE; i++) {
@@ -123,19 +132,25 @@ void Smoke2D::UpdateVelocity(void)
 			Vec3<double> mls_uv(mu[index], mv[index], 0.0);
 			mls_uv = mls_uv * dt * d[index] * ALPHA * 10.0;
 
+			//DCMLS 기반 와류 가중치 계산
 			Vec3<double> uv_unit = uv; uv_unit.Normalize();
 			Vec3<double> mls_unit = mls_uv; mls_unit.Normalize();
+			//3.두 속도 벡터의 각도 차(유사도) 연산
 			mls_vort[index] = uv_unit.Dot(mls_unit) * 0.5 + 0.5;
 
+			//2-1.DCMLS 속도를 외력으로 적용
 			uv += mls_uv;
+			//2-2.정규화로 크기는 유지하고 방향만 변환
 			uv.Normalize();
 			uv *= uv_mag;
 
+			//속도 업데이트
 			u[index] = uv.x();
 			v[index] = uv.y();
 		}
 	}
 
+	//와류 크기 연산
 	for (int i = 1; i <= RES_SMOKE; i++) {
 		for (int j = 1; j <= RES_SMOKE; j++) {
 			int index = i + (RES_SMOKE + 2) * j;
@@ -146,6 +161,7 @@ void Smoke2D::UpdateVelocity(void)
 	SetBoundary(0, vort);
 	SetBoundary(0, vort_mag);
 
+	//와류 기울기 (변화율) 연산 및 정규화 by.jhkim
 	for (int i = 1; i <= RES_SMOKE; i++) {
 		for (int j = 1; j <= RES_SMOKE; j++) {
 			vort_u[IX2(i, j)] = halfrdx * (vort_mag[IX2(i + 1, j)] - vort_mag[IX2(i - 1, j)]);
@@ -161,10 +177,10 @@ void Smoke2D::UpdateVelocity(void)
 			}
 		}
 	}
-
 	SetBoundary(0, vort_u);
 	SetBoundary(0, vort_v);
-
+	
+	//4.mls_vort(Stable Fluid 속도 벡터와 DCMLS 속도 벡터의 유사도) 기반 와류 강도 조절
 	for (int i = 1; i <= RES_SMOKE; i++) {
 		for (int j = 1; j <= RES_SMOKE; j++) {
 			int index = i + (RES_SMOKE + 2) * j;
