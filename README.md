@@ -43,5 +43,20 @@ Figure. Comparison of turbulence generated using the previous MLS interpolation 
 
 1. 이중선형보간법과 DCMLS로 보간된 속도장을 각각 연산
 2. 이중선형보간법 기반 속도장에 DCMLS 기반 속도장을 외력으로 적용
+3. 정규화 후, 이중선형보간법 기반 속도 벡터의 크기를 적용해 크기는 그대로 유지하고 발산 방지
+4. 두 속도 벡터의 유사도를 각도 기반으로 비교 후 가중치로 적용
 
 # 결과
+
+<img width="538" height="715" alt="image" src="https://github.com/user-attachments/assets/1f9bca46-681a-4fcd-aa5b-4aea6e1eed73" />
+
+Figure. Rising smoke sourcing once. (a) Stable Fluid, (b)DCMLS interpolation, (c) DCMLS-applied external force
+
+<img width="578" height="651" alt="image" src="https://github.com/user-attachments/assets/cc2b3bbe-2871-435a-b46a-016cfcbd91cb" />
+
+Figure. Rising smoke keep sourcing. (a) Stable Fluid, (b)DCMLS interpolation, (c) DCMLS-applied external force
+
+- (b)에서 보이는 화이트 노이즈와 전체적인 연기의 움직임에 큰 변화가 없는 현상을 개선
+- **역동적이고 디테일한 난류 표현**으로 유체 시뮬레이션의 현실성 향상
+- Stable Fluids의 진행 경로를 **안정적으로 유지**하면서 난류 강화 (안정성 향상)
+- 각 노드 별 독립적인 연산으로 병렬화 용이, 특이값 분해를 병렬 처리에 최적화된 알고리즘으로 대체 시 고속화 가능 
